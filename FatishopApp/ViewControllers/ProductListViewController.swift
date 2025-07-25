@@ -3,14 +3,32 @@ import UIKit
 class ProductListViewController: UIViewController {
 
     var tableView: UITableView!
+    var segmentedControl: UISegmentedControl!
     var viewModel = ProductListViewModel()
 
     override func viewDidLoad() {
         super.viewDidLoad()
         title = "Товары"
         view.backgroundColor = .systemBackground
+        setupSegmentedControl()
         setupTableView()
         loadProducts()
+    }
+
+    private func setupSegmentedControl() {
+        let categories = viewModel.categories.map { $0.name }
+        segmentedControl = UISegmentedControl(items: categories)
+        segmentedControl.selectedSegmentIndex = 0
+        segmentedControl.addTarget(self, action: #selector(categoryChanged), for: .valueChanged)
+
+        segmentedControl.translatesAutoresizingMaskIntoConstraints = false
+        view.addSubview(segmentedControl)
+
+        NSLayoutConstraint.activate([
+            segmentedControl.topAnchor.constraint(equalTo: view.safeAreaLayoutGuide.topAnchor),
+            segmentedControl.leadingAnchor.constraint(equalTo: view.leadingAnchor, constant: 16),
+            segmentedControl.trailingAnchor.constraint(equalTo: view.trailingAnchor, constant: -16)
+        ])
     }
 
     private func setupTableView() {
@@ -20,12 +38,10 @@ class ProductListViewController: UIViewController {
         tableView.dataSource = self
         tableView.delegate = self
         tableView.rowHeight = UITableView.automaticDimension
-        tableView.estimatedRowHeight = 100
-        tableView.separatorStyle = .singleLine
         view.addSubview(tableView)
 
         NSLayoutConstraint.activate([
-            tableView.topAnchor.constraint(equalTo: view.safeAreaLayoutGuide.topAnchor),
+            tableView.topAnchor.constraint(equalTo: segmentedControl.bottomAnchor, constant: 12),
             tableView.bottomAnchor.constraint(equalTo: view.bottomAnchor),
             tableView.leadingAnchor.constraint(equalTo: view.leadingAnchor),
             tableView.trailingAnchor.constraint(equalTo: view.trailingAnchor),
@@ -33,31 +49,22 @@ class ProductListViewController: UIViewController {
     }
 
     private func loadProducts() {
-        viewModel.fetchProducts { [weak self] in
-            guard let self = self else { return }
-
-            if self.viewModel.products.isEmpty {
-                let emptyLabel = UILabel()
-                emptyLabel.text = "Нет товаров"
-                emptyLabel.textAlignment = .center
-                emptyLabel.textColor = .secondaryLabel
-                emptyLabel.font = .systemFont(ofSize: 18)
-                emptyLabel.frame = self.tableView.bounds
-                self.tableView.backgroundView = emptyLabel
-            } else {
-                self.tableView.backgroundView = nil
-            }
-
+        viewModel.fetchProducts {
             self.tableView.reloadData()
         }
     }
+
+    @objc private func categoryChanged() {
+        tableView.reloadData()
+    }
 }
 
-// MARK: - UITableViewDataSource & UITableViewDelegate
+// MARK: - UITableViewDataSource
 extension ProductListViewController: UITableViewDataSource, UITableViewDelegate {
 
     func tableView(_ tableView: UITableView, numberOfRowsInSection section: Int) -> Int {
-        viewModel.products.count
+        let selectedCategoryId = viewModel.categories[segmentedControl.selectedSegmentIndex].id
+        return viewModel.products.filter { $0.categoryId == selectedCategoryId }.count
     }
 
     func tableView(_ tableView: UITableView, cellForRowAt indexPath: IndexPath) -> UITableViewCell {
@@ -66,22 +73,21 @@ extension ProductListViewController: UITableViewDataSource, UITableViewDelegate 
             return UITableViewCell()
         }
 
-        let product = viewModel.products[indexPath.row]
+        let selectedCategoryId = viewModel.categories[segmentedControl.selectedSegmentIndex].id
+        let filteredProducts = viewModel.products.filter { $0.categoryId == selectedCategoryId }
+        let product = filteredProducts[indexPath.row]
+
         cell.configure(with: product)
         cell.detailButton.tag = indexPath.row
         cell.detailButton.addTarget(self, action: #selector(detailTapped(_:)), for: .touchUpInside)
-
         return cell
     }
 
-    func tableView(_ tableView: UITableView, didSelectRowAt indexPath: IndexPath) {
-        // Снимаем выделение без перехода
-        tableView.deselectRow(at: indexPath, animated: true)
-    }
-
     @objc func detailTapped(_ sender: UIButton) {
-        let index = sender.tag
-        let product = viewModel.products[index]
+        let selectedCategoryId = viewModel.categories[segmentedControl.selectedSegmentIndex].id
+        let filteredProducts = viewModel.products.filter { $0.categoryId == selectedCategoryId }
+        let product = filteredProducts[sender.tag]
+
         let detailVC = ProductDetailViewController()
         detailVC.product = product
         navigationController?.pushViewController(detailVC, animated: true)
